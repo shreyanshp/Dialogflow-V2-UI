@@ -44,7 +44,7 @@
         </div>
 
         <!-- Chat window -->
-        <table v-for="a in answers" class="chat-window">
+        <table v-for="a in answers" class="chat-window" :key="a.responseId">
 
             <!-- Your messages -->
             <tr>
@@ -57,16 +57,16 @@
 
                     <!-- Bot message types / Speech -->
 
-                    <div v-if="a.result.fulfillment.speech" class="bubble bot">
-                        {{a.result.fulfillment.speech}}
+                    <div v-if="a.outputAudio" class="bubble bot">
+                        {{a.outputAudio}}
                     </div>
 
                     <!-- Google Assistant output -->
-                    <div v-for="r in a.result.fulfillment.messages">
+                    <div v-for="(r, index) in a.queryResult.fulfillmentMessages" :key="index">
 
                         <!-- Bot message types / Card -->
 
-                        <div class="mdc-card" v-if="r.type == 'basic_card'">
+                        <div class="mdc-card" v-if="r.message == 'basic_card'">
                             <img :title="r.image.accessibilityText" :alt="r.image.accessibilityText" class="mdc-card__media-item" :src="r.image.url" v-if="r.image">
                             <section class="mdc-card__primary">
                                 <h1 class="mdc-card__title">{{r.title}}</h1>
@@ -76,14 +76,14 @@
                             <section class="mdc-card__supporting-text">
                                 {{r.formattedText}}
                             </section>
-                            <section class="mdc-card__actions" v-for="button in r.buttons">
+                            <section class="mdc-card__actions" v-for="(button, index) in r.buttons" :key="index">
                                 <a class="mdc-button mdc-button--compact themed mdc-card__action" target="_blank" :href="button.openUrlAction.url">{{button.title}} <i class="material-icons openlink">open_in_new</i></a>
                             </section>
                         </div>
 
                         <!-- Bot message types / Carousel Card -->
 
-                        <div class="slider" v-if="r.type == 'carousel_card'">
+                        <div class="slider" v-if="r.message == 'carousel_card'">
                             <carousel 
                                     :perPage="1" 
                                     :navigationEnabled="true"
@@ -109,9 +109,9 @@
 
                         <!-- Bot message types / List -->
 
-                        <div class="mdc-list-group mdc-card" v-if="r.type == 'list_card'">
+                        <div class="mdc-list-group mdc-card" v-if="r.message == 'list_card'">
                             <h3 class="mdc-list-group__subheader">{{r.title}}</h3>
-                            <ul class="mdc-list mdc-list--two-line mdc-list--avatar-list" v-for="item in r.items" @click="autosubmit(item.optionInfo.key)">
+                            <ul class="mdc-list mdc-list--two-line mdc-list--avatar-list" v-for="(item, index) in r.items" :key="index" @click="autosubmit(item.optionInfo.key)">
                                 <li class="mdc-list-item">
                                     <img :title="item.image.accessibilityText" :alt="item.image.accessibilityText" class="mdc-list-item__start-detail" width="56" height="56" :src="item.image.url" v-if="item.image"/>
                                     <span class="mdc-list-item__text">
@@ -124,7 +124,7 @@
 
                         <!-- Bot message types / Link Chip -->
 
-                        <div v-if="r.type == 'link_out_chip'" class="chips">
+                        <div v-if="r.message == 'link_out_chip'" class="chips">
                             <a class="suggestion link" :href="r.url" target="_blank">
                                 {{r.destinationName}} <i class="material-icons openlink">open_in_new</i>
                             </a>
@@ -132,8 +132,8 @@
 
                         <!-- Bot message types / Suggestion Chip -->
 
-                        <div v-if="r.type == 'suggestion_chips'" class="chips">
-                            <div class="suggestion" @click="autosubmit(s.title)" v-for="s in r.suggestions">
+                        <div v-if="r.message == 'suggestions'" class="chips">
+                            <div class="suggestion" @click="autosubmit(s.title)" v-for="(s, index) in r.suggestions.suggestions" :key="index">
                                 {{s.title}}
                             </div>
                         </div>
@@ -152,15 +152,14 @@
         </table>
 
         <br>
-        <p class="copyright" v-if="answers.length > 0">Proudly powered by <a href="https://ushakov.co">Ushakov</a> & <a href="https://dialogflow.com">Dialogflow</a></p>
+        <p class="copyright" v-if="answers.length > 0">Proudly powered by <a href="http://github.com/rkmighwal">Rohit Kumar Mighwal</a> & <a href="https://dialogflow.com">Dialogflow</a></p>
         <a id="bottom"></a>
     </main>
 </section>
 </template>
 
 <style lang="sass">
-@import url("https://fonts.googleapis.com/css?family=Roboto");
-@import "App.sass"
+@import "App.sass";
 </style>
 
 <script>
@@ -206,12 +205,14 @@ export default {
         this.query;
 
       axios.get(detectEndpoint).then(response => {
+        response = response.data; // Get Actual Data
+
         if (
           response.queryResult.action == "input.unknown" &&
           this.config.app.googleIt == true
         ) {
-          response.queryResult.fulfillment.messages[0].unknown = true;
-          response.queryResult.fulfillment.messages[0].text =
+          response.queryResult.fulfillmentMessages[0].unknown = true;
+          response.queryResult.fulfillmentMessages[0].text =
             response.queryResult.resolvedQuery;
         } // if the googleIt is enabled, show the button
 
@@ -224,12 +225,14 @@ export default {
     },
     handle(response) {
       if (
-        response.result.fulfillment.speech ||
-        response.result.fulfillment.messages[0].type == "simple_response"
+        response.outputAudio ||
+        response.queryResult.fulfillmentMessages[0].platform ==
+          "ACTIONS_ON_GOOGLE"
       ) {
         let speech = new SpeechSynthesisUtterance(
-          response.result.fulfillment.speech ||
-            response.result.fulfillment.messages[0].textToSpeech
+          response.outputAudio ||
+            response.queryResult.fulfillmentMessages[0].simpleResponses
+              .simpleResponses[0].textToSpeech
         );
         speech.voiceURI = "native";
         speech.lang = config.locale.settings.speechLang;
